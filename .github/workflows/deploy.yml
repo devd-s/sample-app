@@ -96,4 +96,9 @@ jobs:
       # Verify the ECS service deployment
       - name: Verify ECS service health
         run: |
-          aws ecs describe-services --cluster ${{ secrets.ECS_CLUSTER }} --services ${{ secrets.ECS_SERVICE }} --query 'services[0].deployments'
+          aws ecs describe-services \
+            --cluster ${{ secrets.ECS_CLUSTER }} \  
+            --services ${{ secrets.ECS_SERVICE }} \ 
+            --query 'services[0].deployments'
+
+
