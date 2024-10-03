@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy_utils import database_exists, create_database
+from sqlalchemy.exc import SQLAlchemyError, OperationalError
 import os
 import logging
 
@@ -9,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Database configuration
 def get_db_config():
     db_user = os.environ.get('DB_USER')
     db_password = os.environ.get('DB_PASSWORD')
@@ -22,19 +22,28 @@ def get_db_config():
     
     return f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}'
 
+def create_db_if_not_exists(db_uri):
+    engine = SQLAlchemy().create_engine(db_uri)
+    if not database_exists(engine.url):
+        create_database(engine.url)
+        logger.info(f"Created database: {engine.url.database}")
+    else:
+        logger.info(f"Database already exists: {engine.url.database}")
+
 db_uri = get_db_config()
 if db_uri:
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db = SQLAlchemy(app)
+    try:
+        create_db_if_not_exists(db_uri)
+        app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        db = SQLAlchemy(app)
 
-    # Test database connection
-    with app.app_context():
-        try:
+        # Test database connection
+        with app.app_context():
             db.engine.connect()
             logger.info("Successfully connected to the database!")
-        except SQLAlchemyError as e:
-            logger.error(f"Failed to connect to the database. Error: {str(e)}")
+    except OperationalError as e:
+        logger.error(f"Failed to create or connect to the database. Error: {str(e)}")
 else:
     logger.error("Failed to configure database URI. Application will not function correctly.")
 
