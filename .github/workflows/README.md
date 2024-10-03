@@ -4,23 +4,21 @@ This repository contains a GitHub Actions workflow that implements a Continuous 
 
 ## Workflow Overview
 
-The workflow now consists of three main jobs: `build`, `deploy`, and `rollback` (commented out by default).
+The workflow consists of two main jobs: `build` and `deploy`. Additional jobs and steps for multi-environment deployments, linting, security scanning, notifications, and rollback are included but commented out for future use.
 
 ### Build Job
 
 The build job performs the following steps:
 
 1. Checks out the repository
-2. Sets up Python
-3. Installs dependencies
-4. Runs linting (commented out)
-5. Runs security scanning (commented out)
-6. Sets up Docker Buildx
-7. Configures AWS credentials
-8. Logs in to Amazon ECR
-9. Creates an ECR repository if it doesn't exist
-10. Builds the Docker image
-11. Pushes the Docker image to ECR
+2. Sets up Python (for potential future use)
+3. Installs dependencies (for potential future use)
+4. Sets up Docker Buildx
+5. Configures AWS credentials
+6. Logs in to Amazon ECR
+7. Creates an ECR repository if it doesn't exist
+8. Builds the Docker image
+9. Pushes the Docker image to ECR
 
 ### Deploy Job
 
@@ -31,15 +29,6 @@ The deploy job runs after the build job completes and performs these steps:
 3. Downloads the ECS task definition
 4. Deploys the updated task definition to ECS
 5. Verifies the ECS service health
-6. Sends a notification (commented out)
-
-### Rollback Job (Commented Out)
-
-The rollback job is designed to revert to the previous version if the deployment fails:
-
-1. Configures AWS credentials
-2. Rolls back to the previous task definition
-3. Sends a notification
 
 ## Prerequisites
 
@@ -57,16 +46,14 @@ Before using this workflow, ensure you have the following:
    - `DOCKER_IMAGE_NAME`
    - `ECS_CLUSTER`
    - `ECS_SERVICE`
-   - `SLACK_WEBHOOK` (for notifications, if enabled)
 
 ## Usage
 
-This workflow is triggered on three events:
-1. Push to the `main` branch (deploys to production)
-2. Push to the `develop` branch (deploys to staging)
-3. Pull request to the `main` or `develop` branch
+This workflow is triggered on two events:
+1. Push to the `main` branch
+2. Pull request to the `main` branch
 
-When triggered, it will automatically build, push, and deploy your application to the appropriate environment.
+When triggered, it will automatically build, push, and deploy your application.
 
 ## Customization
 
@@ -76,35 +63,23 @@ You may need to customize the workflow based on your specific requirements:
 2. Adjust the `aws-region` if your resources are in a different AWS region.
 3. Update the `container-name` in the deploy job if your task definition uses a different container name.
 4. Modify the Dockerfile in your repository to match your application's build process.
-5. Uncomment and configure the linting step if you want to include code style checks.
-6. Uncomment and configure the security scanning step to check for vulnerabilities.
-7. Uncomment and configure the notification steps if you want to receive Slack notifications.
-8. Uncomment and configure the rollback job if you want automatic rollbacks on failure.
 
-## Environment-Specific Deployments
+## Future Enhancements
 
-The workflow now supports deploying to different environments based on the branch:
+The workflow includes commented-out sections for the following features:
 
-- Pushes to `main` deploy to the production environment
-- Pushes to `develop` deploy to the staging environment
+1. Linting: A step to run flake8 for code style checking.
+2. Security Scanning: A step to use Snyk for vulnerability scanning.
+3. Multi-environment Deployments: Logic to deploy to different environments based on the branch.
+4. Notifications: Steps to send Slack notifications for successful deployments and rollbacks.
+5. Rollback Mechanism: A job to automatically roll back to the previous version if the deployment fails.
 
-Ensure you have the appropriate ECS clusters and services set up for each environment.
+To enable these features in the future:
 
-## Linting (Commented Out)
-
-The workflow includes a commented-out step for linting using flake8. Uncomment and adjust this step to enforce your project's code style guidelines.
-
-## Security Scanning (Commented Out)
-
-A security scanning step using Snyk is included but commented out. Uncomment and configure this step to check for vulnerabilities in your dependencies and Docker image.
-
-## Rollback Mechanism (Commented Out)
-
-A rollback job is included but commented out. This job can automatically revert to the previous version if the deployment fails. Uncomment and configure this job if you want to enable automatic rollbacks.
-
-## Notifications (Commented Out)
-
-The workflow includes commented-out steps to send Slack notifications for successful and failed deployments. Uncomment and configure these steps if you want to receive notifications.
+1. Uncomment the relevant sections in the workflow file.
+2. Configure any necessary additional secrets (e.g., `SNYK_TOKEN`, `SLACK_WEBHOOK`).
+3. Set up the required resources (e.g., separate ECS clusters for different environments).
+4. Update the workflow file with the correct resource names and configurations.
 
 ## Troubleshooting
 
