@@ -1,29 +1,42 @@
 from flask import Flask, request, jsonify, render_template_string
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 # Database configuration
 def get_db_config():
-    db_user = os.environ['DB_USER']
-    db_password = os.environ['DB_PASSWORD']
-    db_host = os.environ['DB_HOST']
-    db_name = os.environ['DB_NAME']
+    db_user = os.environ.get('DB_USER')
+    db_password = os.environ.get('DB_PASSWORD')
+    db_host = os.environ.get('DB_HOST')
+    db_name = os.environ.get('DB_NAME')
+    
+    if not all([db_user, db_password, db_host, db_name]):
+        logger.error("Database configuration is incomplete. Please check environment variables.")
+        return None
+    
     return f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}'
 
-app.config['SQLALCHEMY_DATABASE_URI'] = get_db_config()
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db_uri = get_db_config()
+if db_uri:
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db = SQLAlchemy(app)
 
-db = SQLAlchemy(app)
-
-# Add this block to test the database connection
-with app.app_context():
-    try:
-        db.engine.connect()
-        print("Successfully connected to the database!")
-    except SQLAlchemyError as e:
-        print("Failed to connect to the database. Error:", str(e))
+    # Test database connection
+    with app.app_context():
+        try:
+            db.engine.connect()
+            logger.info("Successfully connected to the database!")
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to connect to the database. Error: {str(e)}")
+else:
+    logger.error("Failed to configure database URI. Application will not function correctly.")
 
 
 # Define a simple model
