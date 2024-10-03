@@ -92,6 +92,12 @@ jobs:
       - name: Debug Task Definition ARN
         run: |
           echo "Task Definition ARN: ${{ env.TASK_DEFINITION_ARN }}"
+
+      
+      - name: Print Secrets for Debugging
+        run: |
+          echo "ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}"
+          echo "ECS_SERVICE: ${{ secrets.ECS_SERVICE }}"
       
       # Verify the ECS service deployment
       - name: Verify ECS service health
