@@ -1,12 +1,13 @@
 name: CI/CD Pipeline for Notejam Flask Application
-
 on:
   push:
     branches:
-      - main  # Trigger on push to the main branch
+      - main
+      - develop
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   build:
@@ -15,50 +16,55 @@ jobs:
       id-token: write
       contents: read
     steps:
-      # Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      # Set up Docker Buildx
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # - name: Run linting
+      #   run: |
+      #     pip install flake8
+      #     flake8 .
+
+      # - name: Run security scanning
+      #   uses: snyk/actions/python@master
+      #   env:
+      #     SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Print AWS Environment Variables
-        run: |
-          echo "AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}"
-          echo "AWS_REGION: ${{ secrets.AWS_REGION }}"
-
-      # Set up AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-central-1
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      # Log in to Amazon ECR
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-        with:
-          region: eu-central-1
 
-      # Create ECR repository if it doesn't exist
       - name: Create ECR Repository
         run: |
           aws ecr describe-repositories --repository-names ${{ secrets.ECR_REPOSITORY }} || \
           aws ecr create-repository --repository-name ${{ secrets.ECR_REPOSITORY }}
 
-      # Build the Docker image
-      - name: Build Docker image
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t ${{ secrets.DOCKER_IMAGE_NAME }} .
-          docker tag ${{ secrets.DOCKER_IMAGE_NAME }}:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
-
-      # Push the Docker image to Amazon ECR
-      - name: Push Docker image to ECR
-        run: |
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+          docker build -t $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
 
   deploy:
     runs-on: ubuntu-latest
@@ -67,7 +73,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      # Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -75,36 +80,55 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Download task definition 
+      - name: Download task definition
         run: |
-          aws ecs describe-task-definition --task-definition dev-task --query taskDefinition > task-definition.json
+          aws ecs describe-task-definition --task-definition ${{ github.ref == 'refs/heads/main' && 'prod-task' || 'dev-task' }} --query taskDefinition > task-definition.json
 
-      # Deploy the registered task definition to ECS
       - name: Deploy to Amazon ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          cluster: ${{ secrets.ECS_CLUSTER }}                # Name of the ECS cluster
-          service: ${{ secrets.ECS_SERVICE }}                # Name of the ECS service
-          task-definition: task-definition.json 
-          container-name: "dev-container"                    # Container name in the ECS task definition
-          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+          cluster: ${{ github.ref == 'refs/heads/main' && secrets.PROD_ECS_CLUSTER || secrets.DEV_ECS_CLUSTER }}
+          service: ${{ github.ref == 'refs/heads/main' && secrets.PROD_ECS_SERVICE || secrets.DEV_ECS_SERVICE }}
+          task-definition: task-definition.json
+          container-name: ${{ github.ref == 'refs/heads/main' && 'prod-container' || 'dev-container' }}
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
 
-      - name: Debug Task Definition ARN
-        run: |
-          echo "Task Definition ARN: ${{ env.TASK_DEFINITION_ARN }}"
-
-      
-      - name: Print Secrets for Debugging
-        run: |
-          echo "ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}"
-          echo "ECS_SERVICE: ${{ secrets.ECS_SERVICE }}"
-      
-      # Verify the ECS service deployment
       - name: Verify ECS service health
         run: |
           aws ecs describe-services \
-            --cluster ${{ secrets.ECS_CLUSTER }} \
-            --services ${{ secrets.ECS_SERVICE }} \
+            --cluster ${{ github.ref == 'refs/heads/main' && secrets.PROD_ECS_CLUSTER || secrets.DEV_ECS_CLUSTER }} \
+            --services ${{ github.ref == 'refs/heads/main' && secrets.PROD_ECS_SERVICE || secrets.DEV_ECS_SERVICE }} \
             --query 'services[0].deployments'
 
+      # - name: Send success notification
+      #   if: success()
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     status: ${{ job.status }}
+      #     text: Deployment to ${{ github.ref == 'refs/heads/main' && 'PRODUCTION' || 'STAGING' }} succeeded!
+      #     webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
+  # rollback:
+  #   needs: [build, deploy]
+  #   runs-on: ubuntu-latest
+  #   if: failure()
+  #   steps:
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v1
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ secrets.AWS_REGION }}
+  
+  #     - name: Rollback ECS Deployment
+  #       run: |
+  #         aws ecs update-service --cluster ${{ github.ref == 'refs/heads/main' && secrets.PROD_ECS_CLUSTER || secrets.DEV_ECS_CLUSTER }} \
+  #                                --service ${{ github.ref == 'refs/heads/main' && secrets.PROD_ECS_SERVICE || secrets.DEV_ECS_SERVICE }} \
+  #                                --task-definition ${{ github.ref == 'refs/heads/main' && 'prod-task' || 'dev-task' }}:${{ github.event.before }}
+  
+  #     - name: Send rollback notification
+  #       uses: 8398a7/action-slack@v3
+  #       with:
+  #         status: ${{ job.status }}
+  #         text: Deployment failed. Rolled back to previous version.
+  #         webhook_url: ${{ secrets.SLACK_WEBHOOK }}
