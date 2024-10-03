@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
 import os
@@ -73,10 +74,14 @@ HTML = '''
             form { margin-bottom: 20px; }
             ul { list-style-type: none; padding: 0; }
             li { margin-bottom: 10px; }
+            .message { color: #0000ff; }
         </style>
     </head>
     <body>
         <h1>User Management</h1>
+        {% if message %}
+            <p class="message">{{ message }}</p>
+        {% endif %}
         <form method="POST">
             <input type="text" name="username" placeholder="Username" required>
             <input type="email" name="email" placeholder="Email" required>
@@ -94,14 +99,21 @@ HTML = '''
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    message = None
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
         new_user = User(username=username, email=email)
-        db.session.add(new_user)
-        db.session.commit()
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            message = f"User {username} added successfully!"
+        except IntegrityError:
+            db.session.rollback()
+            message = f"Username {username} already exists. Please choose a different username."
+    
     users = User.query.all()
-    return render_template_string(HTML, users=users)
+    return render_template_string(HTML, users=users, message=message)
 
 @app.route('/users', methods=['GET'])
 def get_users():
