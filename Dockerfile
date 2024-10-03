@@ -17,4 +17,4 @@ ENV FLASK_RUN_HOST=0.0.0.0
 ENV RUN_ENV=production
 
 # Use a shell form CMD to allow for environment variable substitution
-CMD if [ "$RUN_ENV" = "development" ] ; then flask run --port=8000 ; else gunicorn --bind 0.0.0.0:8000 wsgi:app ; fi
+CMD if [ "$RUN_ENV" = "development" ] ; then flask run --port=8000 ; else gunicorn --bind 0.0.0.0:80 wsgi:app ; fi
