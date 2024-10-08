@@ -58,3 +58,5 @@
 4. ECS tasks retrieve secrets from Secrets Manager/Parameter Store for database access.
 5. Responses are sent back through the ALB to the clients.
 
+   
+
